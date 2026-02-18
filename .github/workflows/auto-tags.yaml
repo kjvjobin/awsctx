@@ -1,0 +1,115 @@
+name: Auto tag from merged PR labels
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump level"
+        required: false
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Determine bump level
+        id: bump
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_BUMP: ${{ inputs.bump }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            level="${DISPATCH_BUMP:-patch}"
+            echo "level=$level" >> "$GITHUB_OUTPUT"
+            echo "Selected bump (manual): $level"
+            exit 0
+          fi
+
+          labels_json="${PR_LABELS:-[]}" 
+          labels=$(echo "$labels_json" | jq -r 'map(.name | ascii_downcase)')
+          echo "PR labels: $labels"
+
+          if echo "$labels" | jq -e 'index("no-tag") != null' >/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Tagging skipped due to 'no-tag' label."
+            exit 0
+          fi
+
+          if echo "$labels" | jq -e 'index("major") != null' >/dev/null; then
+            level=major
+          elif echo "$labels" | jq -e 'index("minor") != null' >/dev/null; then
+            level=minor
+          else
+            level=patch
+          fi
+
+          echo "level=$level" >> "$GITHUB_OUTPUT"
+          echo "Selected bump: $level"
+
+      - name: Compute next tag
+        id: next
+        if: steps.bump.outputs.skip != 'true'
+        shell: bash
+        env:
+          LEVEL: ${{ steps.bump.outputs.level }}
+        run: |
+          set -euo pipefail
+
+          latest="$(git tag --list 'v*.*.*' | sort -V | tail -n1)"
+          if [[ -z "$latest" ]]; then
+            latest="v0.0.0"
+          fi
+
+          ver="${latest#v}"
+          IFS='.' read -r MA MI PA <<<"$ver"
+
+          case "$LEVEL" in
+            major) MA=$((MA+1)); MI=0; PA=0 ;;
+            minor) MI=$((MI+1)); PA=0 ;;
+            patch|*) PA=$((PA+1)) ;;
+          esac
+
+          next="v${MA}.${MI}.${PA}"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+          echo "Next tag: $next"
+
+      - name: Create and push tag
+        if: steps.bump.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.next.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists; exiting."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG"
+          git push origin "$TAG"
