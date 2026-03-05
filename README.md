@@ -21,14 +21,11 @@ It supports:
 
  ## Build from source
 
-
-## Build
-
 ```bash
 go build -o bin/awsctx ./cmd/awsctx
 ```
 
-## Install
+## Install from source
 
 ```bash
 mkdir -p "$HOME/.local/bin"
@@ -39,6 +36,47 @@ Add to `PATH` (zsh):
 
 ```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+## Install from GitHub Releases
+
+Download the latest binary for your platform, then move it into your `PATH`.
+
+### macOS (Apple Silicon)
+
+```bash
+curl -L -o /tmp/awsctx https://github.com/kjvjobin/awsctx/releases/latest/download/awsctx_darwin_arm64
+chmod +x /tmp/awsctx
+sudo mv /tmp/awsctx /usr/local/bin/awsctx
+```
+
+### macOS (Intel)
+
+```bash
+curl -L -o /tmp/awsctx https://github.com/kjvjobin/awsctx/releases/latest/download/awsctx_darwin_amd64
+chmod +x /tmp/awsctx
+sudo mv /tmp/awsctx /usr/local/bin/awsctx
+```
+
+### Linux (x86_64)
+
+```bash
+curl -L -o /tmp/awsctx https://github.com/kjvjobin/awsctx/releases/latest/download/awsctx_linux_amd64
+chmod +x /tmp/awsctx
+sudo mv /tmp/awsctx /usr/local/bin/awsctx
+```
+
+Verify install:
+
+```bash
+awsctx --help
+```
+
+Then enable shell integration:
+
+```bash
+awsctx init zsh --write
 source ~/.zshrc
 ```
 
