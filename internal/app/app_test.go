@@ -104,3 +104,25 @@ func TestUseWithAutoSSOLogin(t *testing.T) {
 		t.Fatalf("expected login for sandbox profile, got %q", loggedInProfile)
 	}
 }
+
+func TestUseFZFWithoutFZFInstalled(t *testing.T) {
+	dir := t.TempDir()
+	settings := config.Settings{
+		CredentialsFile: filepath.Join(dir, "credentials"),
+		ConfigFile:      filepath.Join(dir, "config"),
+		StateFile:       filepath.Join(dir, "state.json"),
+		FZFCommand:      "definitely-not-installed-fzf",
+	}
+	if err := os.WriteFile(settings.CredentialsFile, []byte("[sandbox]\naws_access_key_id = A\naws_secret_access_key = B\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := New(settings, filepath.Join(dir, "awsctx.json"))
+
+	err := a.UseFZF()
+	if err == nil {
+		t.Fatal("expected error when fzf is missing")
+	}
+	if err.Error() != missingFZFMessage() {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
