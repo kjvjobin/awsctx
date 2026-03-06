@@ -9,7 +9,17 @@ It supports:
 - Local `awsctx` settings customization
 - Writing/updating static and SSO profiles securely
 
-## Build from source
+## Why awsctx?
+
+- `kubectx`-style UX: running `awsctx` opens `fzf` profile selection directly.
+- Built for both static credentials and AWS SSO profile flows.
+- Includes profile management commands (`configure static` and `configure sso`), not just switching.
+- Supports `use`, `toggle`, `current`, and shell export integration.
+- Optional SSO auto-login with session-validity check to avoid unnecessary re-auth prompts.
+- One-command shell setup via `awsctx init zsh --write`.
+- Ships as cross-platform release binaries with checksums for direct install.
+
+ ## Build from source
 
 ```bash
 go build -o bin/awsctx ./cmd/awsctx

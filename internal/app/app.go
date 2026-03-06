@@ -165,11 +165,19 @@ func (a *App) UseFZF() error {
 	if len(parts) == 0 {
 		return errors.New("fzf_command cannot be empty")
 	}
+	if _, err := exec.LookPath(parts[0]); err != nil {
+		return errors.New(missingFZFMessage())
+	}
 	cmd := exec.Command(parts[0], parts[1:]...)
 	cmd.Stdin = strings.NewReader(b.String())
 	cmd.Stderr = a.Stderr
 	out, err := cmd.Output()
 	if err != nil {
+		var execErr *exec.Error
+		if errors.As(err, &execErr) {
+			return errors.New(missingFZFMessage())
+
+		}
 		return fmt.Errorf("fzf selection failed: %w", err)
 	}
 	choice := strings.TrimSpace(string(out))
@@ -403,4 +411,13 @@ func expandPath(path string) string {
 		return filepath.Join(home, strings.TrimPrefix(path, "~/"))
 	}
 	return path
+}
+
+func missingFZFMessage() string {
+	return strings.Join([]string{
+		"fzf not found in PATH. Install fzf or use:",
+		"",
+		"awsctx use <profile>            To select a profile without fzf",
+		"awsctx --help                   For more options",
+	}, "\n")
 }
