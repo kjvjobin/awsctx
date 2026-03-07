@@ -89,6 +89,7 @@ func TestUseWithAutoSSOLogin(t *testing.T) {
 		loggedInProfile = profile
 		return nil
 	}
+	a.SessionOK = func(profile string) bool { return false }
 
 	if err := a.UseWithLogin("dev", false); err != nil {
 		t.Fatal(err)

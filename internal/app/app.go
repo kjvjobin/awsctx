@@ -25,6 +25,7 @@ type App struct {
 	Stderr      io.Writer
 	Stdin       io.Reader
 	LoginRunner func(profile string) error
+	SessionOK   func(profile string) bool
 }
 
 func New(settings config.Settings, configPath string) *App {
@@ -36,6 +37,7 @@ func New(settings config.Settings, configPath string) *App {
 		Stdin:      os.Stdin,
 	}
 	a.LoginRunner = a.runSSOLogin
+	a.SessionOK = a.hasValidSession
 	return a
 }
 
@@ -343,7 +345,7 @@ func (a *App) maybeLoginSSO(p awsprofiles.Profile, shouldLogin bool) error {
 	if !shouldLogin || !p.IsSSO {
 		return nil
 	}
-	if a.hasValidSession(p.Name) {
+	if a.SessionOK != nil && a.SessionOK(p.Name) {
 		return nil
 	}
 	return a.LoginRunner(p.Name)
@@ -354,6 +356,7 @@ func (a *App) runSSOLogin(profile string) error {
 	cmd.Stdin = a.Stdin
 	cmd.Stdout = a.Stdout
 	cmd.Stderr = a.Stderr
+	cmd.Env = a.awsCLIEnv()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("aws sso login failed for %q: %w", profile, err)
 	}
@@ -365,7 +368,19 @@ func (a *App) hasValidSession(profile string) bool {
 	cmd.Stdin = nil
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
+	cmd.Env = a.awsCLIEnv()
 	return cmd.Run() == nil
+}
+
+func (a *App) awsCLIEnv() []string {
+	env := os.Environ()
+	if a.Settings.CredentialsFile != "" {
+		env = append(env, "AWS_SHARED_CREDENTIALS_FILE="+a.Settings.CredentialsFile)
+	}
+	if a.Settings.ConfigFile != "" {
+		env = append(env, "AWS_CONFIG_FILE="+a.Settings.ConfigFile)
+	}
+	return env
 }
 
 func PromptIfMissing(reader io.Reader, field, prompt, currentValue string) (string, error) {
