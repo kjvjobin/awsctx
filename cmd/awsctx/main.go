@@ -168,44 +168,59 @@ func runConfigure(a *app.App, args []string) error {
 
 func runInit(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: awsctx init zsh [--write] [--file <path>]")
+		return errors.New("usage: awsctx init <zsh|bash|fish> [--write] [--file <path>]")
 	}
-	switch args[0] {
+	shell := args[0]
+	fs := flag.NewFlagSet("init "+shell, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	write := fs.Bool("write", false, "Write/update snippet in shell config")
+	targetFile := fs.String("file", "", "Target shell config file")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve executable path: %w", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	var snippet string
+	var install func(path, binPath string) error
+	var defaultPath string
+	switch shell {
 	case "zsh":
-		fs := flag.NewFlagSet("init zsh", flag.ContinueOnError)
-		fs.SetOutput(os.Stderr)
-		write := fs.Bool("write", false, "Write/update snippet in ~/.zshrc")
-		targetFile := fs.String("file", "", "Target zsh file (default: ~/.zshrc)")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
-		}
-
-		exePath, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("resolve executable path: %w", err)
-		}
-
-		if !*write {
-			fmt.Print(app.GenerateZshSnippet(exePath))
-			return nil
-		}
-
-		path := *targetFile
-		if path == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("resolve home directory: %w", err)
-			}
-			path = home + "/.zshrc"
-		}
-		if err := app.InstallZshSnippet(path, exePath); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stdout, "installed awsctx zsh integration in %s\n", path)
-		return nil
+		snippet = app.GenerateZshSnippet(exePath)
+		install = app.InstallZshSnippet
+		defaultPath = home + "/.zshrc"
+	case "bash":
+		snippet = app.GenerateBashSnippet(exePath)
+		install = app.InstallBashSnippet
+		defaultPath = home + "/.bashrc"
+	case "fish":
+		snippet = app.GenerateFishSnippet(exePath)
+		install = app.InstallFishSnippet
+		defaultPath = home + "/.config/fish/config.fish"
 	default:
-		return fmt.Errorf("unsupported shell %q (supported: zsh)", args[0])
+		return fmt.Errorf("unsupported shell %q (supported: zsh, bash, fish)", shell)
 	}
+
+	if !*write {
+		fmt.Print(snippet)
+		return nil
+	}
+	path := *targetFile
+	if path == "" {
+		path = defaultPath
+	}
+	if err := install(path, exePath); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "installed awsctx %s integration in %s\n", shell, path)
+	return nil
 }
 
 func runUse(a *app.App, args []string) error {
@@ -259,7 +274,7 @@ Commands:
   fzf                     Pick profile using fzf
   settings                Show current awsctx settings
   settings [flags]        Update awsctx settings
-  init zsh                Print/install zsh wrapper
+  init <shell>            Print/install shell wrapper (zsh, bash, fish)
   configure static        Add/update static credentials profile
   configure sso           Add/update SSO profile in AWS config
 
@@ -274,6 +289,8 @@ Examples:
   awsctx fzf
   awsctx settings --fzf-command "fzf --height 40%" --auto-sso-login true
   awsctx init zsh --write
+  awsctx init bash --write
+  awsctx init fish --write
   awsctx configure static --profile dev --access-key-id AKIA... --secret-access-key ...
   awsctx configure sso --profile eng --sso-start-url https://example.awsapps.com/start --sso-region us-east-1 --sso-account-id 123456789012 --sso-role-name Admin
 `)

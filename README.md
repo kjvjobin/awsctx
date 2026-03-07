@@ -16,32 +16,12 @@ It supports:
 - Includes profile management commands (`configure static` and `configure sso`), not just switching.
 - Supports `use`, `toggle`, `current`, and shell export integration.
 - Optional SSO auto-login with session-validity check to avoid unnecessary re-auth prompts.
-- One-command shell setup via `awsctx init zsh --write`.
+- One-command shell setup via `awsctx init <zsh|bash|fish> --write`.
 - Ships as cross-platform release binaries with checksums for direct install.
 
- ## Build from source
+## Quick Start (GitHub Release)
 
-```bash
-go build -o bin/awsctx ./cmd/awsctx
-```
-
-## Install from source
-
-```bash
-mkdir -p "$HOME/.local/bin"
-cp bin/awsctx "$HOME/.local/bin/awsctx"
-```
-
-Add to `PATH` (zsh):
-
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-## Install from GitHub Releases
-
-Download the latest binary for your platform, then move it into your `PATH`.
+Download the latest binary for your platform.
 
 ### macOS (Apple Silicon)
 
@@ -67,72 +47,71 @@ chmod +x /tmp/awsctx
 sudo mv /tmp/awsctx /usr/local/bin/awsctx
 ```
 
-Verify install:
+Verify:
 
 ```bash
 awsctx --help
 ```
 
-Then enable shell integration:
+## Shell Integration (Required for env switching)
+
+`awsctx` can update its own state, but shell integration is needed to update `AWS_PROFILE` in your current shell session.
+
+### zsh
 
 ```bash
 awsctx init zsh --write
 source ~/.zshrc
 ```
 
-## Commands
+### bash
 
 ```bash
-awsctx list
-awsctx current
-awsctx use <profile>
+awsctx init bash --write
+source ~/.bashrc
+```
+
+### fish
+
+```bash
+awsctx init fish --write
+source ~/.config/fish/config.fish
+```
+
+Preview snippets without writing:
+
+```bash
+awsctx init zsh
+awsctx init bash
+awsctx init fish
+```
+
+## Usage
+
+Core commands:
+
+```bash
+awsctx                 # open fzf picker
+awsctx list            # list profiles
+awsctx current         # show active profile
+awsctx use <profile>   # switch directly
+awsctx toggle          # switch to previous profile
+awsctx env             # print export/unset command
+```
+
+SSO login on demand:
+
+```bash
 awsctx use <profile> --login
-awsctx toggle
-awsctx fzf
-awsctx env
-awsctx settings
-awsctx init zsh
-awsctx configure static ...
-awsctx configure sso ...
 ```
 
-## Shell integration
-
-Install zsh integration once:
+If `fzf` is not installed:
 
 ```bash
-awsctx init zsh --write
-source ~/.zshrc
+awsctx use <profile>
 ```
 
-Preview the snippet before writing:
-
-```bash
-awsctx init zsh
-```
-
-If you run from the repo binary directly:
-
-```bash
-bin/awsctx init zsh --write
-source ~/.zshrc
-```
-
-Verify:
-
-```bash
-awsctx use sandbox
-echo "$AWS_PROFILE"
-aws sts get-caller-identity
-```
-
-Login on demand for SSO profiles:
-
-```bash
-awsctx use sandbox --login
-```
-
-## Configure awsctx behavior
+## Configure awsctx
 
 Show current settings:
 
@@ -150,15 +129,15 @@ awsctx settings \
   --fzf-command "fzf --height 40%"
 ```
 
-Enable auto SSO login during `use`, `toggle`, and `fzf` profile switches:
+Enable automatic SSO login on switch:
 
 ```bash
 awsctx settings --auto-sso-login true
 ```
 
-## Configure profile entries
+## Configure AWS Profiles
 
-### Static credentials profile
+Static credentials profile:
 
 ```bash
 awsctx configure static \
@@ -168,7 +147,7 @@ awsctx configure static \
   --region us-east-1
 ```
 
-### SSO profile
+SSO profile:
 
 ```bash
 awsctx configure sso \
@@ -180,13 +159,26 @@ awsctx configure sso \
   --region us-east-1
 ```
 
-## Security notes
+## Build from Source
 
-- `awsctx` uses strict file permissions (`0700` dirs, `0600` files) for its own state/config and rewritten AWS files.
-- Writes are atomic (`temp file + rename`) to reduce corruption risk.
-- `awsctx use` validates profile names from AWS files before activation.
-- Avoid passing secrets on CLI in shared environments because shell history may capture them; prefer env vars or prompt input.
+```bash
+go build -o bin/awsctx ./cmd/awsctx
+```
+
+Install built binary:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+cp bin/awsctx "$HOME/.local/bin/awsctx"
+```
+
+## Security Notes
+
+- Uses restrictive file permissions (`0700` dirs, `0600` files) for awsctx-managed files.
+- Uses atomic writes (`temp file + rename`) to reduce corruption risk.
+- Validates profile names before activation.
+- Prefer prompts or env vars over inline secrets to avoid shell-history leaks.
 
 ## Limitations
 
-- This tool rewrites INI files and does not preserve comments/order.
+- Rewrites INI files and does not preserve original comments/order.
