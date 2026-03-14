@@ -1,6 +1,9 @@
 package app
 
 import (
+	"awsctx/internal/awsprofiles"
+	"awsctx/internal/config"
+	"awsctx/internal/state"
 	"bufio"
 	"errors"
 	"fmt"
@@ -8,15 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"text/tabwriter"
-
-	"awsctx/internal/awsprofiles"
-	"awsctx/internal/config"
-	"awsctx/internal/state"
 )
+
+var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 type App struct {
 	Settings    config.Settings
@@ -50,20 +51,35 @@ func (a *App) List() error {
 	if err != nil {
 		return err
 	}
-	w := tabwriter.NewWriter(a.Stdout, 2, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ACTIVE\tPROFILE\tTYPE\tSOURCE")
+	nameWidth := len("PROFILE")
+	typeWidth := len("TYPE")
 	for _, p := range profiles {
 		kind := "static"
 		if p.IsSSO {
 			kind = "sso"
 		}
-		active := ""
-		if p.Name == s.Current {
-			active = "*"
+		if len(p.Name) > nameWidth {
+			nameWidth = len(p.Name)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", active, p.Name, kind, p.Source)
+		if len(kind) > typeWidth {
+			typeWidth = len(kind)
+		}
 	}
-	return w.Flush()
+
+	fmt.Fprintf(a.Stdout, "%-*s  %-*s  %s\n", nameWidth, "PROFILE", typeWidth, "TYPE", "SOURCE")
+	for _, p := range profiles {
+		kind := "static"
+		if p.IsSSO {
+			kind = "sso"
+		}
+		nameCol := fmt.Sprintf("%-*s", nameWidth, p.Name)
+		if p.Name == s.Current {
+			// Match fzf current-profile color for a consistent UX.
+			nameCol = colorizeGreen(nameCol)
+		}
+		fmt.Fprintf(a.Stdout, "%s  %-*s  %s\n", nameCol, typeWidth, kind, p.Source)
+	}
+	return nil
 }
 
 func (a *App) Current() error {
@@ -157,9 +173,20 @@ func (a *App) UseFZF() error {
 	}
 
 	sort.Slice(profiles, func(i, j int) bool { return profiles[i].Name < profiles[j].Name })
+	currentState, err := state.Load(a.Settings.StateFile)
+	if err != nil {
+		return err
+	}
 	var b strings.Builder
 	for _, p := range profiles {
-		b.WriteString(p.Name)
+		if p.Name == currentState.Current {
+			// Kubectx-like visual cue: current profile is highlighted in green.
+			b.WriteString("\x1b[32m")
+			b.WriteString(p.Name)
+			b.WriteString("\x1b[0m")
+		} else {
+			b.WriteString(p.Name)
+		}
 		b.WriteByte('\n')
 	}
 
@@ -170,7 +197,19 @@ func (a *App) UseFZF() error {
 	if _, err := exec.LookPath(parts[0]); err != nil {
 		return errors.New(missingFZFMessage())
 	}
-	cmd := exec.Command(parts[0], parts[1:]...)
+	args := parts[1:]
+	hasANSI := false
+	for _, arg := range args {
+		if arg == "--ansi" {
+			hasANSI = true
+			break
+		}
+	}
+	if !hasANSI {
+		args = append(args, "--ansi")
+	}
+
+	cmd := exec.Command(parts[0], args...)
 	cmd.Stdin = strings.NewReader(b.String())
 	cmd.Stderr = a.Stderr
 	out, err := cmd.Output()
@@ -180,12 +219,17 @@ func (a *App) UseFZF() error {
 			return errors.New(missingFZFMessage())
 
 		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 130 {
+			return nil
+		}
 		return fmt.Errorf("fzf selection failed: %w", err)
 	}
 	choice := strings.TrimSpace(string(out))
 	if choice == "" {
 		return errors.New("no profile selected")
 	}
+	choice = ansiEscapePattern.ReplaceAllString(choice, "")
 	return a.UseWithLogin(choice, false)
 }
 
@@ -435,4 +479,8 @@ func missingFZFMessage() string {
 		"awsctx use <profile>            To select a profile without fzf",
 		"awsctx --help                   For more options",
 	}, "\n")
+}
+
+func colorizeGreen(s string) string {
+	return "\x1b[32m" + s + "\x1b[0m"
 }
