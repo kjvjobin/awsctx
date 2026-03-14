@@ -18,6 +18,7 @@ import (
 )
 
 var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+var ErrSelectionCanceled = errors.New("selection canceled")
 
 type App struct {
 	Settings    config.Settings
@@ -47,7 +48,7 @@ func (a *App) List() error {
 	if err != nil {
 		return err
 	}
-	s, err := state.Load(a.Settings.StateFile)
+	activeProfile, err := a.activeProfile()
 	if err != nil {
 		return err
 	}
@@ -73,7 +74,7 @@ func (a *App) List() error {
 			kind = "sso"
 		}
 		nameCol := fmt.Sprintf("%-*s", nameWidth, p.Name)
-		if p.Name == s.Current {
+		if p.Name == activeProfile {
 			// Match fzf current-profile color for a consistent UX.
 			nameCol = colorizeGreen(nameCol)
 		}
@@ -83,27 +84,27 @@ func (a *App) List() error {
 }
 
 func (a *App) Current() error {
-	s, err := state.Load(a.Settings.StateFile)
+	profile, err := a.activeProfile()
 	if err != nil {
 		return err
 	}
-	if s.Current == "" {
+	if profile == "" {
 		return errors.New("no active profile")
 	}
-	fmt.Fprintf(a.Stdout, "Active Profile: %s\n", s.Current)
+	fmt.Fprintf(a.Stdout, "Active Profile: %s\n", profile)
 	return nil
 }
 
 func (a *App) Env() error {
-	s, err := state.Load(a.Settings.StateFile)
+	profile, err := a.activeProfile()
 	if err != nil {
 		return err
 	}
-	if s.Current == "" {
+	if profile == "" {
 		fmt.Fprintln(a.Stdout, "unset AWS_PROFILE")
 		return nil
 	}
-	fmt.Fprintf(a.Stdout, "export AWS_PROFILE=%s\n", strconv.Quote(s.Current))
+	fmt.Fprintf(a.Stdout, "export AWS_PROFILE=%s\n", strconv.Quote(profile))
 	return nil
 }
 
@@ -173,13 +174,13 @@ func (a *App) UseFZF() error {
 	}
 
 	sort.Slice(profiles, func(i, j int) bool { return profiles[i].Name < profiles[j].Name })
-	currentState, err := state.Load(a.Settings.StateFile)
+	activeProfile, err := a.activeProfile()
 	if err != nil {
 		return err
 	}
 	var b strings.Builder
 	for _, p := range profiles {
-		if p.Name == currentState.Current {
+		if p.Name == activeProfile {
 			// Kubectx-like visual cue: current profile is highlighted in green.
 			b.WriteString("\x1b[32m")
 			b.WriteString(p.Name)
@@ -221,13 +222,13 @@ func (a *App) UseFZF() error {
 		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) && exitErr.ExitCode() == 130 {
-			return nil
+			return ErrSelectionCanceled
 		}
 		return fmt.Errorf("fzf selection failed: %w", err)
 	}
 	choice := strings.TrimSpace(string(out))
 	if choice == "" {
-		return errors.New("no profile selected")
+		return errors.New("No profile selected")
 	}
 	choice = ansiEscapePattern.ReplaceAllString(choice, "")
 	return a.UseWithLogin(choice, false)
@@ -483,4 +484,18 @@ func missingFZFMessage() string {
 
 func colorizeGreen(s string) string {
 	return "\x1b[32m" + s + "\x1b[0m"
+}
+
+func (a *App) activeProfile() (string, error) {
+	if p := strings.TrimSpace(os.Getenv("AWS_PROFILE")); p != "" {
+		return p, nil
+	}
+	if p := strings.TrimSpace(os.Getenv("AWS_DEFAULT_PROFILE")); p != "" {
+		return p, nil
+	}
+	s, err := state.Load(a.Settings.StateFile)
+	if err != nil {
+		return "", err
+	}
+	return s.Current, nil
 }

@@ -13,6 +13,10 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		if errors.Is(err, app.ErrSelectionCanceled) {
+			fmt.Fprintln(os.Stderr, "Error: No profile selected")
+			os.Exit(130)
+		}
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}

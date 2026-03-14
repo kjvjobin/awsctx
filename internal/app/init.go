@@ -23,7 +23,13 @@ AWSCTX_BIN=%s
 awsctx() {
   "$AWSCTX_BIN" "$@" || return $?
   if [ "$#" -eq 0 ] || [ "$1" = "use" ] || [ "$1" = "toggle" ] || [ "$1" = "fzf" ]; then
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_CREDENTIAL_EXPIRATION
     eval "$("$AWSCTX_BIN" env)"
+    if [ -n "${AWS_PROFILE:-}" ]; then
+      export AWS_DEFAULT_PROFILE="$AWS_PROFILE"
+    else
+      unset AWS_DEFAULT_PROFILE
+    fi
   fi
 }
 %s
@@ -41,7 +47,13 @@ AWSCTX_BIN=%s
 awsctx() {
   "$AWSCTX_BIN" "$@" || return $?
   if [ "$#" -eq 0 ] || [ "$1" = "use" ] || [ "$1" = "toggle" ] || [ "$1" = "fzf" ]; then
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_CREDENTIAL_EXPIRATION
     eval "$("$AWSCTX_BIN" env)"
+    if [ -n "${AWS_PROFILE:-}" ]; then
+      export AWS_DEFAULT_PROFILE="$AWS_PROFILE"
+    else
+      unset AWS_DEFAULT_PROFILE
+    fi
   fi
 }
 %s
@@ -60,13 +72,16 @@ function awsctx
   command "$AWSCTX_BIN" $argv
   or return $status
   if test (count $argv) -eq 0; or contains -- $argv[1] use toggle fzf
+    set -e AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_CREDENTIAL_EXPIRATION
     set -l env_out (command "$AWSCTX_BIN" env 2>/dev/null)
     if string match -q "export AWS_PROFILE=*" -- $env_out
       set -l profile (string replace -r '^export AWS_PROFILE=' '' -- $env_out)
       set profile (string trim -c '"' -- $profile)
       set -gx AWS_PROFILE $profile
+      set -gx AWS_DEFAULT_PROFILE $profile
     else
       set -e AWS_PROFILE
+      set -e AWS_DEFAULT_PROFILE
     end
   end
 end
