@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"awsctx/internal/config"
+	"awsctx/internal/state"
 )
 
 func TestConfigureStatic(t *testing.T) {
@@ -125,5 +126,55 @@ func TestUseFZFWithoutFZFInstalled(t *testing.T) {
 	}
 	if err.Error() != missingFZFMessage() {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestUnsetClearsCurrentProfile(t *testing.T) {
+	dir := t.TempDir()
+	settings := config.Settings{
+		CredentialsFile: filepath.Join(dir, "credentials"),
+		ConfigFile:      filepath.Join(dir, "config"),
+		StateFile:       filepath.Join(dir, "state.json"),
+		FZFCommand:      "fzf",
+	}
+	if err := state.Save(settings.StateFile, state.Data{Current: "sandbox", Last: "utility"}); err != nil {
+		t.Fatal(err)
+	}
+	a := New(settings, filepath.Join(dir, "awsctx.json"))
+
+	if err := a.Unset(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := state.Load(settings.StateFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Current != "" {
+		t.Fatalf("expected current to be empty, got %q", s.Current)
+	}
+	if s.Last != "sandbox" {
+		t.Fatalf("expected last to track previous current profile, got %q", s.Last)
+	}
+}
+
+func TestActiveProfileRespectsIsolatedUnsetMarker(t *testing.T) {
+	t.Setenv("AWSCTX_PROFILE_UNSET", "1")
+	t.Setenv("AWS_PROFILE", "sandbox")
+
+	dir := t.TempDir()
+	settings := config.Settings{
+		CredentialsFile: filepath.Join(dir, "credentials"),
+		ConfigFile:      filepath.Join(dir, "config"),
+		StateFile:       filepath.Join(dir, "state.json"),
+		FZFCommand:      "fzf",
+	}
+	a := New(settings, filepath.Join(dir, "awsctx.json"))
+
+	got, err := a.activeProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("expected empty active profile when AWSCTX_PROFILE_UNSET=1, got %q", got)
 	}
 }

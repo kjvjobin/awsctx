@@ -34,6 +34,9 @@ func TestGenerateBashSnippet(t *testing.T) {
 	if !strings.Contains(s, bashStartMarker) || !strings.Contains(s, bashEndMarker) {
 		t.Fatal("expected markers in bash snippet")
 	}
+	if !strings.Contains(s, "\"$1\" = \"unset\"") || !strings.Contains(s, "\"$1\" = \"-u\"") {
+		t.Fatal("expected unset support in bash snippet")
+	}
 }
 
 func TestGenerateFishSnippet(t *testing.T) {
@@ -43,5 +46,8 @@ func TestGenerateFishSnippet(t *testing.T) {
 	}
 	if !strings.Contains(s, fishStartMarker) || !strings.Contains(s, fishEndMarker) {
 		t.Fatal("expected markers in fish snippet")
+	}
+	if !strings.Contains(s, "contains -- $argv[1] use toggle fzf unset -u") {
+		t.Fatal("expected unset support in fish snippet")
 	}
 }

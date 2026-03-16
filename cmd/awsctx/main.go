@@ -23,6 +23,8 @@ func main() {
 }
 
 func run(args []string) error {
+	args = rewriteLegacyArgs(args)
+
 	root := flag.NewFlagSet("awsctx", flag.ContinueOnError)
 	root.SetOutput(os.Stderr)
 	configPath := root.String("config", "", "Path to awsctx config file")
@@ -50,6 +52,8 @@ func run(args []string) error {
 		return a.List()
 	case "current", "cur":
 		return a.Current()
+	case "unset":
+		return a.Unset()
 	case "env":
 		return a.Env()
 	case "use":
@@ -266,12 +270,20 @@ func parseOptionalBool(v string) (*bool, error) {
 	}
 }
 
+func rewriteLegacyArgs(args []string) []string {
+	if len(args) == 1 && args[0] == "-u" {
+		return []string{"unset"}
+	}
+	return args
+}
+
 func usage() {
 	fmt.Print(`awsctx - switch AWS CLI profiles quickly
 
 Commands:
   list|ls                 List discovered profiles
   current|cur             Print active awsctx profile
+  unset|-u                Clear active awsctx profile
   env                     Print shell export/unset for AWS_PROFILE
   use <profile>           Activate profile
   toggle|t                Switch back to previous profile
@@ -288,6 +300,7 @@ Global flags:
 Examples:
   awsctx list
   awsctx use prod
+  awsctx unset
   awsctx use prod --login
   eval "$(awsctx env)"
   awsctx fzf

@@ -96,20 +96,34 @@ func (a *App) Current() error {
 }
 
 func (a *App) Env() error {
-	profile, err := a.activeProfile()
+	s, err := state.Load(a.Settings.StateFile)
 	if err != nil {
 		return err
 	}
-	if profile == "" {
+	if s.Current == "" {
 		fmt.Fprintln(a.Stdout, "unset AWS_PROFILE")
 		return nil
 	}
-	fmt.Fprintf(a.Stdout, "export AWS_PROFILE=%s\n", strconv.Quote(profile))
+	fmt.Fprintf(a.Stdout, "export AWS_PROFILE=%s\n", strconv.Quote(s.Current))
 	return nil
 }
 
 func (a *App) Use(profile string) error {
 	return a.UseWithLogin(profile, false)
+}
+
+func (a *App) Unset() error {
+	s, err := state.Load(a.Settings.StateFile)
+	if err != nil {
+		return err
+	}
+	s.Last = s.Current
+	s.Current = ""
+	if err := state.Save(a.Settings.StateFile, s); err != nil {
+		return err
+	}
+	fmt.Fprintln(a.Stdout, "Active Profile: <none>")
+	return nil
 }
 
 func (a *App) UseWithLogin(profile string, forceLogin bool) error {
@@ -487,6 +501,9 @@ func colorizeGreen(s string) string {
 }
 
 func (a *App) activeProfile() (string, error) {
+	if strings.TrimSpace(os.Getenv("AWSCTX_PROFILE_UNSET")) == "1" {
+		return "", nil
+	}
 	if p := strings.TrimSpace(os.Getenv("AWS_PROFILE")); p != "" {
 		return p, nil
 	}

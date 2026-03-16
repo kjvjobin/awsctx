@@ -68,6 +68,13 @@ func TestRunUseArgumentParsing(t *testing.T) {
 	}
 }
 
+func TestRewriteLegacyArgs(t *testing.T) {
+	got := rewriteLegacyArgs([]string{"-u"})
+	if len(got) != 1 || got[0] != "unset" {
+		t.Fatalf("expected -u to rewrite to unset, got %v", got)
+	}
+}
+
 func makeTestApp(t *testing.T) *app.App {
 	t.Helper()
 	dir := t.TempDir()
