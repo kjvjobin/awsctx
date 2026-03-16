@@ -23,6 +23,9 @@ jobs:
   tag:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+      release_needed: ${{ steps.create_tag.outputs.release_needed }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -100,6 +103,7 @@ jobs:
           echo "Next tag: $next"
 
       - name: Create and push tag
+        id: create_tag
         if: steps.bump.outputs.skip != 'true'
         env:
           TAG: ${{ steps.next.outputs.tag }}
@@ -107,9 +111,71 @@ jobs:
           set -euo pipefail
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists; exiting."
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$TAG"
           git push origin "$TAG"
+          echo "release_needed=true" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: tag
+    if: needs.tag.outputs.release_needed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build cross-platform binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          targets=(
+            "linux amd64"
+            "linux arm64"
+            "darwin amd64"
+            "darwin arm64"
+            "windows amd64"
+          )
+
+          for target in "${targets[@]}"; do
+            read -r goos goarch <<<"$target"
+            ext=""
+            if [[ "$goos" == "windows" ]]; then
+              ext=".exe"
+            fi
+            out="dist/awsctx_${goos}_${goarch}${ext}"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -trimpath -ldflags "-s -w" -o "$out" ./cmd/awsctx
+          done
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum awsctx_* > checksums.txt
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag.outputs.tag }}
+          files: |
+            dist/awsctx_*
+            dist/checksums.txt
+          generate_release_notes: true

@@ -22,7 +22,12 @@ func GenerateZshSnippet(binPath string) string {
 AWSCTX_BIN=%s
 awsctx() {
   "$AWSCTX_BIN" "$@" || return $?
-  if [ "$#" -eq 0 ] || [ "$1" = "use" ] || [ "$1" = "toggle" ] || [ "$1" = "fzf" ]; then
+  if [ "$#" -eq 0 ] || [ "$1" = "use" ] || [ "$1" = "toggle" ] || [ "$1" = "fzf" ] || [ "$1" = "unset" ] || [ "$1" = "-u" ]; then
+    if [ "$1" = "unset" ] || [ "$1" = "-u" ]; then
+      export AWSCTX_PROFILE_UNSET=1
+    else
+      unset AWSCTX_PROFILE_UNSET
+    fi
     unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_CREDENTIAL_EXPIRATION
     eval "$("$AWSCTX_BIN" env)"
     if [ -n "${AWS_PROFILE:-}" ]; then
@@ -46,7 +51,12 @@ func GenerateBashSnippet(binPath string) string {
 AWSCTX_BIN=%s
 awsctx() {
   "$AWSCTX_BIN" "$@" || return $?
-  if [ "$#" -eq 0 ] || [ "$1" = "use" ] || [ "$1" = "toggle" ] || [ "$1" = "fzf" ]; then
+  if [ "$#" -eq 0 ] || [ "$1" = "use" ] || [ "$1" = "toggle" ] || [ "$1" = "fzf" ] || [ "$1" = "unset" ] || [ "$1" = "-u" ]; then
+    if [ "$1" = "unset" ] || [ "$1" = "-u" ]; then
+      export AWSCTX_PROFILE_UNSET=1
+    else
+      unset AWSCTX_PROFILE_UNSET
+    fi
     unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_CREDENTIAL_EXPIRATION
     eval "$("$AWSCTX_BIN" env)"
     if [ -n "${AWS_PROFILE:-}" ]; then
@@ -71,7 +81,16 @@ set -gx AWSCTX_BIN %s
 function awsctx
   command "$AWSCTX_BIN" $argv
   or return $status
-  if test (count $argv) -eq 0; or contains -- $argv[1] use toggle fzf
+  if test (count $argv) -eq 0; or contains -- $argv[1] use toggle fzf unset -u
+    set -l first_arg ""
+    if test (count $argv) -gt 0
+      set first_arg $argv[1]
+    end
+    if test "$first_arg" = "unset"; or test "$first_arg" = "-u"
+      set -gx AWSCTX_PROFILE_UNSET 1
+    else
+      set -e AWSCTX_PROFILE_UNSET
+    end
     set -e AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_CREDENTIAL_EXPIRATION
     set -l env_out (command "$AWSCTX_BIN" env 2>/dev/null)
     if string match -q "export AWS_PROFILE=*" -- $env_out
