@@ -97,7 +97,7 @@ awsctx current         # show active profile
 awsctx use <profile>   # switch directly
 awsctx toggle          # switch to previous profile
 awsctx env             # print export command
-awsctx unset           # unsets the current profile
+awsctx unset           # clear active awsctx profile
 ```
 
 SSO login on demand:
